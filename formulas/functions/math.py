@@ -18,8 +18,13 @@ from decimal import Decimal, ROUND_HALF_UP
 from . import (
     get_error, raise_errors, is_number, flatten, wrap_ufunc, wrap_func,
     replace_empty, Error, xfilter, wrap_impure_func, COMPILING, to_number,
-    clean_values, Array, XlError
+    clean_values, Array, XlError, _text2num, text2num
 )
+import re
+from ..errors import FoundError
+
+# Regex pattern for finding wildcards in criteria strings
+_re_condition = re.compile('(?<!~)[?*]')
 
 # noinspection PyDictCreation
 FUNCTIONS = {}
@@ -419,6 +424,159 @@ def xsum(*args, func=np.sum):
 FUNCTIONS['PRODUCT'] = wrap_func(functools.partial(xsum, func=np.prod))
 FUNCTIONS['SUM'] = wrap_func(xsum)
 FUNCTIONS['SUMIF'] = wrap_func(functools.partial(xfilter, xsum))
+
+def xsumifs(sum_range, *args):
+    """Sums values that meet multiple criteria.
+    
+    Args:
+        sum_range: Range containing the values to sum.
+        *args: Pairs of (criteria_range, criteria) to filter by.
+    
+    Returns:
+        Sum of filtered values or an error.
+    """
+    # SUMIFS adds the cells specified by a given set of conditions or criteria.
+    # The syntax of the SUMIFS function is:
+    # SUMIFS(sum_range, criteria_range1, criteria1, [criteria_range2, criteria2], ...)
+    # - sum_range is the range to sum
+    # - criteria_range1 is the range to evaluate with criteria1
+    # - criteria1 is the condition to apply to criteria_range1
+    # - criteria_range2, criteria2, etc. are additional ranges and criteria
+    raise_errors(sum_range, *args)
+    
+    if len(args) < 2 or len(args) % 2 != 0:
+        return Error.errors['#VALUE!']
+    
+    # Convert to numpy arrays
+    sum_range = np.asarray(sum_range, dtype=object)
+    sum_range_shape = sum_range.shape
+    
+    # Get all criteria ranges and their criteria
+    criteria_ranges = []
+    criteria_values = []
+    
+    for i in range(0, len(args), 2):
+        criteria_range = np.asarray(args[i], dtype=object)
+        criteria = args[i+1]
+
+        # if criteria is not a 1x1 array of arrays, then raise an error
+        if not isinstance(criteria, np.ndarray) or criteria.shape != (1, 1):
+            raise Exception("FAILURE in SUMIFS")
+        
+        criteria = criteria[0][0]
+        
+        # Check if ranges have compatible shapes
+        if criteria_range.shape != sum_range_shape:
+            return Error.errors['#VALUE!']
+        
+        criteria_ranges.append(criteria_range)
+        criteria_values.append(criteria)
+    
+    # Create a mask where all criteria are met
+    mask = np.ones(sum_range.shape, dtype=bool)
+    
+    for criteria_range, criteria in zip(criteria_ranges, criteria_values):
+
+        
+        
+        # Apply xfilter logic for each criteria pair
+        test_range = {'raw': replace_empty(criteria_range, '')}
+        
+        # Extract filtering logic similar to xfilter
+        from .operators import LOGIC_OPERATORS
+        operator = '='
+        criteria_value = criteria
+        
+        if isinstance(criteria, str):
+            # Handle wildcards similar to xfilter
+            it = _re_condition.findall(criteria)
+            if it:
+                _ = lambda v: re.escape(v.replace('~?', '?').replace('~*', '*'))
+                match = re.compile(''.join(sum(zip(
+                    map(_, _re_condition.split(criteria)),
+                    tuple(map(lambda v: '.%s' % v, it)) + ('',)
+                ), ()))).match
+                f = lambda v: isinstance(v, str) and bool(match(v))
+                current_mask = np.vectorize(f, otypes=[bool])(test_range['raw'])
+                mask = mask & current_mask
+                continue
+            elif any(v in criteria for v in ('~?', '~*')):
+                criteria = criteria.replace('~?', '?').replace('~*', '*')
+
+            # Extract operator from the beginning of criteria string
+            for k in LOGIC_OPERATORS:
+                if criteria.startswith(k) and criteria != k:
+                    operator, criteria_value = k, criteria[len(k):]
+                    break
+            
+            # Try to convert criteria to a numeric value if possible
+            from ..tokens.operand import Number, Error
+            from ..errors import TokenError
+            
+            try:
+                # First check if it's a simple number
+                for token in (Number, Error):
+                    try:
+                        token_obj = token(criteria_value)
+                        if token_obj.end_match == len(criteria_value):
+                            criteria_value = token_obj.compile()
+                            break
+                    except TokenError:
+                        pass
+            except Exception:
+                # If conversion fails, keep original criteria
+                pass
+            
+            # Convert text to number if possible
+            if isinstance(criteria_value, str):
+                criteria_value = _text2num(criteria_value)
+        
+        from .operators import _get_type_id
+        type_id, operator_func = _get_type_id(criteria_value), LOGIC_OPERATORS[operator]
+        
+        # Create a function to check each value against criteria
+        @functools.lru_cache()
+        def check(value):
+            try:
+                # Handle type conversions for comparison
+                if isinstance(value, str) and is_number(value) and is_number(criteria_value):
+                    value = float(value)
+                elif isinstance(criteria_value, str) and is_number(criteria_value) and is_number(value):
+                    criteria_val = float(criteria_value)
+                    return operator_func(value, criteria_val)
+                
+                # Check if types match before comparing
+                if _get_type_id(value) == type_id:
+                    return operator_func(value, criteria_value)
+                # Special case for numeric comparisons where types might differ
+                elif is_number(value) and is_number(criteria_value):
+                    return operator_func(float(value), float(criteria_value))
+                return False
+            except:
+                return False
+        
+        # Apply the check to create a boolean mask
+        if is_number(criteria_value):
+            test_range['num'] = text2num(test_range['raw'])
+            values = test_range['num']
+        else:
+            values = test_range['raw']
+        
+        current_mask = np.vectorize(check, otypes=[bool])(values)
+        mask = mask & current_mask
+    
+    # Apply the mask to sum_range and calculate sum
+    try:
+        filtered_values = sum_range[mask]
+        filtered_values = to_number(filtered_values).astype(float)
+        return np.sum(filtered_values[~np.isnan(filtered_values)])
+    except FoundError as ex:
+        return ex.err
+    except Exception:
+        return Error.errors['#VALUE!']
+
+FUNCTIONS['SUMIFS'] = wrap_func(xsumifs)
+
 FUNCTIONS['SUMSQ'] = wrap_func(functools.partial(
     xsum, func=lambda v: np.sum(np.square(v))
 ))

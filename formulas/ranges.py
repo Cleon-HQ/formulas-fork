@@ -107,7 +107,57 @@ def _shape(n1, n2, r1, r2, **kw):
     return r, c
 
 
+def detect_array_result(value):
+    """
+    Detect if a value appears to be an array function result that should preserve its shape.
+    
+    This detects:
+    1. NumPy arrays with multiple elements
+    2. Multi-dimensional arrays
+    3. Lists of lists (2D structures)
+    """
+    # Check if it's a numpy array with multiple elements in multiple dimensions
+    if isinstance(value, np.ndarray):
+        shape = value.shape
+        if len(shape) == 2 and (shape[0] > 1 or shape[1] > 1):
+            return True
+        
+    # Check if it's a list/tuple containing lists/tuples (2D structure)
+    elif isinstance(value, (list, tuple)) and len(value) > 0:
+        if isinstance(value[0], (list, tuple, np.ndarray)):
+            return True
+        # Check if it's a 1D list with multiple elements (potential array result)
+        if len(value) > 1:
+            return True
+    
+    return False
+
+
 def _reshape_array_as_excel(value, base_shape):
+    """
+    Reshape array to match Excel's expected shape, with special handling for array formulas.
+    
+    If the value looks like an array formula result (multiple dimensions or elements),
+    preserve its shape instead of forcing it into base_shape.
+    """
+    # If the value is already the right shape, just return it
+    if hasattr(value, 'shape') and value.shape == base_shape:
+        return value
+        
+    # Check if this appears to be an array formula result
+    if detect_array_result(value):
+        # If the array is already 2D, preserve its shape
+        if isinstance(value, np.ndarray) and len(value.shape) == 2:
+            return value
+        
+        # Convert to 2D numpy array if it's not already
+        if not isinstance(value, np.ndarray):
+            try:
+                return np.array(value, dtype=object)
+            except:
+                pass
+    
+    # Original reshape logic for non-array results
     try:
         return np.reshape(value, base_shape)
     except ValueError:

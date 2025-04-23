@@ -325,3 +325,60 @@ FUNCTIONS['VARPA'] = wrap_func(functools.partial(
         xstdev, ddof=0, func=np.var
     ), default=None
 ))
+
+def _logest_filter(known_y, known_x):
+    for y, x in zip(known_y, known_x):
+        if not any(isinstance(i, (str, bool)) for i in (y, x)) and y > 0:
+            yield y, x
+
+
+def _parse_logest_data(yp, xp):
+    yp, xp = tuple(flatten(yp, check=None)), tuple(flatten(xp, check=None))
+    if (sh.EMPTY,) == yp or (sh.EMPTY,) == xp:
+        raise FoundError(err=Error.errors['#VALUE!'])
+    if len(yp) != len(xp):
+        raise FoundError(err=Error.errors['#N/A'])
+    raise_errors(*zip(yp, xp))
+    filtered = tuple(_logest_filter(yp, xp))
+    if len(filtered) <= 1:
+        raise FoundError(err=Error.errors['#DIV/0!'])
+    return tuple(zip(*filtered))
+
+
+def xlogest(known_y_values, known_x_values):
+    """
+    Calculates an exponential curve that fits the data and returns an array of values
+    that describes the curve.
+    The equation for the curve is y = b*m^x
+    """
+    try:
+        try:
+            y_data, x_data = _parse_logest_data(known_y_values, known_x_values)
+        except FoundError as ex:
+            return ex.err
+        
+        # Take natural log of y values for regression
+        ln_y = np.log(y_data)
+        
+        # Calculate linear regression on ln(y) vs x
+        x_array = np.array(x_data)
+        ln_y_array = np.array(ln_y)
+        
+        # Using the existing slope coefficient function
+        try:
+            a, b = _slope_coeff(ln_y_array, x_array)
+        except FoundError as ex:
+            return ex.err
+        
+        # Convert back from ln form to exponential form
+        # If ln(y) = a + b*x, then y = e^a * e^(b*x) = e^a * (e^b)^x
+        m = math.exp(b)  # The base (e^b)
+        b_value = math.exp(a)  # The coefficient (e^a)
+        
+        # Return as a properly shaped 2D array (1x2)
+        return np.array([[m, b_value]], dtype=object)
+    except Exception as e:
+        return Error.errors['#VALUE!']
+
+
+FUNCTIONS['LOGEST'] = wrap_func(xlogest)

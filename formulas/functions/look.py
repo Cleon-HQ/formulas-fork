@@ -331,3 +331,174 @@ def xtranspose(array):
 
 
 FUNCTIONS['TRANSPOSE'] = wrap_func(xtranspose)
+
+
+def args_parser_xlookup(lookup_val, lookup_vec, return_vec, not_found=None, match_mode=0, search_mode=1):
+    """
+    Parse arguments for XLOOKUP function.
+    
+    Parameters
+    ----------
+    lookup_val : value to look up
+    lookup_vec : range to search in
+    return_vec : range to return values from
+    not_found : value to return if lookup_val is not found
+    match_mode : matching method (0=exact, -1=exact/smaller, 1=exact/larger, 2=wildcard)
+    search_mode : search method (1=first-to-last, -1=last-to-first, 2=binary ascending, -2=binary descending)
+    
+    Returns
+    -------
+    parsed arguments for the xlookup function
+    """
+    lookup_val_types, lookup_val, lookup_array_index, lookup_array_type, lookup_array, _ = args_parser_match_array(
+        lookup_val, lookup_vec, 0  # Use 0 as default match_type for exact match
+    )
+
+    result_vec = np.ravel(return_vec)
+    # Handle match_mode parameter
+    if match_mode is sh.EMPTY:
+        match_mode = 0
+    match_mode = int(match_mode)
+    # Handle search_mode parameter
+    if search_mode is sh.EMPTY:
+        search_mode = 1
+    search_mode = int(search_mode)
+    
+    # If search_mode is -1 (last-to-first), reverse the arrays
+    if search_mode == -1:
+        lookup_array = lookup_array[::-1]
+        lookup_array_index = np.arange(len(lookup_array), 0, -1)
+        lookup_array_type = lookup_array_type[::-1]
+    # For binary search modes (2 and -2), we should sort the arrays
+    elif abs(search_mode) == 2:
+        sort_indices = np.argsort(lookup_array)
+        if search_mode == -2:  # descending
+            sort_indices = sort_indices[::-1]
+        lookup_array = lookup_array[sort_indices]
+        lookup_array_index = lookup_array_index[sort_indices]
+        lookup_array_type = lookup_array_type[sort_indices]
+    
+    return lookup_val_types, lookup_val, lookup_array_index, lookup_array_type, lookup_array, match_mode, result_vec, not_found
+
+def _xlookup(
+        lookup_value_type, lookup_value, lookup_array_index, lookup_array_type,
+        lookup_array, match_mode, result_vec, not_found
+):
+    """
+    Implementation of XLOOKUP function.
+    
+    Parameters
+    ----------
+    lookup_value_type : type of lookup value
+    lookup_value : value to search for
+    lookup_array_index : indices of lookup array
+    lookup_array_type : types in lookup array
+    lookup_array : array to search in
+    match_mode : matching method
+    result_vec : return array
+    not_found : value to return if no match found
+    
+    Returns
+    -------
+    result from return_array or not_found value
+    """
+    # Default not_found to #N/A error
+    if not_found is None:
+        not_found = Error.errors['#N/A']
+    
+    # For exact match (mode 0)
+    if match_mode == 0:
+        b = lookup_value_type == lookup_array_type
+        index = lookup_array_index[b]
+        array = lookup_array[b]
+        
+        # Find exact match
+        match_index = np.where(lookup_value == array)[0]
+        if len(match_index) > 0:
+            return result_vec[index[match_index[0]] - 1]
+        return not_found
+    
+    # For exact match or next smaller item (mode -1)
+    elif match_mode == -1:
+        b = lookup_value_type == lookup_array_type
+        index = lookup_array_index[b]
+        array = lookup_array[b]
+        
+        # Find closest smaller or equal value
+        valid_indices = np.where(array <= lookup_value)[0]
+        if len(valid_indices) > 0:
+            max_idx = valid_indices[-1]
+            if array[max_idx] == lookup_value:
+                return result_vec[index[max_idx] - 1]
+            else:
+                return result_vec[index[max_idx] - 1]
+        return not_found
+    
+    # For exact match or next larger item (mode 1)
+    elif match_mode == 1:
+        b = lookup_value_type == lookup_array_type
+        index = lookup_array_index[b]
+        array = lookup_array[b]
+        
+        # Find exact match
+        match_indices = np.where(array == lookup_value)[0]
+        if len(match_indices) > 0:
+            return result_vec[index[match_indices[0]] - 1]
+            
+        # Find next larger value
+        valid_indices = np.where(array > lookup_value)[0]
+        if len(valid_indices) > 0:
+            min_idx = valid_indices[0]
+            return result_vec[index[min_idx] - 1]
+        return not_found
+    
+    # For wildcard match (mode 2)
+    elif match_mode == 2:
+        if lookup_value_type == 1 and any(v in lookup_value for v in '*~?'):
+            def sub(m):
+                return {'\\': '', '?': '.', '*': '.*'}[m.groups()[0]]
+                
+            pattern = regex.compile(r'^%s$' % regex.sub(
+                r'(?<!\\\~)\\(?P<sub>[\*\?])|(?P<sub>\\)\~(?=\\[\*\?])',
+                sub,
+                regex.escape(lookup_value)
+            ), regex.IGNORECASE)
+            
+            b = lookup_value_type == lookup_array_type
+            index = lookup_array_index[b]
+            array = lookup_array[b]
+            
+            # Find first match with the pattern
+            for i, value in enumerate(array):
+                if pattern.match(value):
+                    return result_vec[index[i] - 1]
+        else:
+            # If no wildcards, treat as exact match
+            b = lookup_value_type == lookup_array_type
+            index = lookup_array_index[b]
+            array = lookup_array[b]
+            
+            match_indices = np.where(array == lookup_value)[0]
+            if len(match_indices) > 0:
+                return result_vec[index[match_indices[0]] - 1]
+        
+        return not_found
+    
+    # Invalid match_mode fallback to exact match
+    else:
+        b = lookup_value_type == lookup_array_type
+        index = lookup_array_index[b]
+        array = lookup_array[b]
+        
+        match_indices = np.where(array == lookup_value)[0]
+        if len(match_indices) > 0:
+            return result_vec[index[match_indices[0]] - 1]
+        return not_found
+
+FUNCTIONS['_XLFN.XLOOKUP'] = FUNCTIONS['XLOOKUP'] = wrap_ufunc(
+    _xlookup,
+    input_parser=lambda *a: a,
+    args_parser=args_parser_xlookup,
+    check_error=lambda *a: get_error(a[1]),
+    excluded={2, 3, 4, 5, 6, 7}
+)
