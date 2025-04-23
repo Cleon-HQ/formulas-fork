@@ -6,7 +6,7 @@ import numpy as np
 class TestRentalCarCalculation(unittest.TestCase):
     def test_rental_car_calculation(self):
         # TODO move file into repo
-        PATH = "/Users/rohan/Downloads/Rental Car Model (7).xlsx"
+        PATH = "test/test_files/excel_rental_car.xlsx"
 
         xl_model = formulas.ExcelModel().loads(PATH).finish()
 
@@ -50,10 +50,6 @@ class TestRentalCarCalculation(unittest.TestCase):
 
         # average monthly profit (round for floating point precision)
         assert np.round(f68_value.value[0][0], 5) == 581.22628
-
-        
-
-        
 
 
 if __name__ == "__main__":
