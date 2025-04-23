@@ -1,1 +1,6 @@
 - don't forget to add custom tests
+- figure out array formulas and @
+- Figure out the differences between these two for both parsing and evaluation 
+  - ('A1:B1', '=INDEX({2,3;4,5},1)', {}, '<Ranges>(A1:B1)=[[2 3]]'),
+  - ('A1', '=INDEX({2,3;4,5},1)', {}, '<Ranges>(A1)=[[2]]'),
+  - RIGHT NOW THE 

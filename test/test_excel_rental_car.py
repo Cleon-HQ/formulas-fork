@@ -5,7 +5,8 @@ import numpy as np
 
 class TestRentalCarCalculation(unittest.TestCase):
     def test_rental_car_calculation(self):
-        PATH = "/Users/rohan/Downloads/Rental Car Model (6).xlsx"
+        # TODO move file into repo
+        PATH = "/Users/rohan/Downloads/Rental Car Model (7).xlsx"
 
         xl_model = formulas.ExcelModel().loads(PATH).finish()
 
@@ -43,15 +44,16 @@ class TestRentalCarCalculation(unittest.TestCase):
                     sheet_name
                 ][param_name]
 
-        # Calculate with inputs properly formatted
         result = xl_model.calculate(inputs=inputs)
-        # Access results directly from calculation result
 
         f68_value = result.get(f"'[{name_of_file}]MODEL'!F68")
-        print(f68_value)
 
-        # average monthly profit
-        assert f68_value.value == np.array([[581.2262768650985]])
+        # average monthly profit (round for floating point precision)
+        assert np.round(f68_value.value[0][0], 5) == 581.22628
+
+        
+
+        
 
 
 if __name__ == "__main__":

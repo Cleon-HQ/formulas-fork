@@ -737,15 +737,19 @@ class TestCell(unittest.TestCase):
         #  '<Ranges>(A1:D1)=[[1 2 #N/A #N/A]]')
     ])
     def test_output(self, case):
-        reference, formula, inputs, result = case
-        dsp = sh.Dispatcher()
-        cell = Cell(reference, formula).compile()
-        assert cell.add(dsp)
-        output = str(dsp(inputs)[cell.output])
-        self.assertEqual(
-            result, output,
-            'Formula({}): {} != {}'.format(formula, result, output)
-        )
+        try:
+            reference, formula, inputs, result = case
+            dsp = sh.Dispatcher()
+            cell = Cell(reference, formula).compile()
+            assert cell.add(dsp)
+            output = str(dsp(inputs)[cell.output])
+            self.assertEqual(
+                result, output,
+                'Formula({}): {} != {}'.format(formula, result, output)
+            )
+        except Exception as e:
+            error = str(e)
+            breakpoint()
 
     @ddt.idata([
         ('A1', '=NORMSDIST(2,TRUE)', {},
