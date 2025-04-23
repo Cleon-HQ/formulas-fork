@@ -119,25 +119,9 @@ def _reshape_array_as_excel(value, base_shape):
     Reshape array to match Excel's expected shape, with special handling for array formulas.
     """
     try:
-        same_number_of_elements = value.size == base_shape[0] * base_shape[1]
-        if same_number_of_elements:
-            return np.reshape(value, base_shape)
-        
-        min_dimension_shape = min([value.shape, base_shape], key=len)
-        max_dimension_shape = (
-            base_shape if min_dimension_shape == value.shape else value.shape
-        )
-        desired_shape = tuple(
-            [
-                max(min_dimension_shape[i], max_dimension_shape[i])
-                if i < len(min_dimension_shape)
-                else max_dimension_shape[i]
-                for i in range(len(max_dimension_shape))
-            ]
-        )
-        return np.reshape(value, desired_shape)
+        return np.reshape(value, base_shape)
     except ValueError:
-        res, r, c = _init_reshape(desired_shape, value)
+        res, r, c = _init_reshape(base_shape, value)
         try:
             res[:r, :c] = value
         except ValueError:
