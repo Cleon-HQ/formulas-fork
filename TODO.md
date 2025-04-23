@@ -2,5 +2,6 @@
 - Figure out the differences between these two for both parsing and evaluation 
   - ('A1:B1', '=INDEX({2,3;4,5},1)', {}, '<Ranges>(A1:B1)=[[2 3]]'),
   - ('A1', '=INDEX({2,3;4,5},1)', {}, '<Ranges>(A1)=[[2]]'),
+- ANCHORS CHANGE BEHAVIOR?! array formula?!. =LOGEST(D2:M2,D$1:M$1) gives problems but then =LOGEST(D2:M2,D1:M1) is fine. why...?
 - figure out array formulas and @ and other details about excel. try xlcalculator.
 - fully test the excel rental car workbook (all parameters, all outputs)
