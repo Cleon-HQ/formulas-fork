@@ -5,9 +5,7 @@ import numpy as np
 
 class TestRentalCarCalculation(unittest.TestCase):
     def test_rental_car_calculation(self):
-        # TODO move file into repo
         PATH = "test/test_files/excel_rental_car.xlsx"
-        PATH = '/Users/rohan/Downloads/Rental Car Model (8).xlsx'
 
         xl_model = formulas.ExcelModel().loads(PATH).finish()
 
