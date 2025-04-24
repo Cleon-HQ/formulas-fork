@@ -747,6 +747,7 @@ class TestCell(unittest.TestCase):
             'Formula({}): {} != {}'.format(formula, result, output)
         )
 
+
     @ddt.idata([
         ('A1', '=NORMSDIST(2,TRUE)', {},
          '<Ranges>\(A1\)=\[\[0.977249868051820\d*\]\]'),

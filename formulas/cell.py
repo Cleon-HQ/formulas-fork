@@ -32,9 +32,7 @@ class CellWrapper(sh.add_args):
 
     def __call__(self, *args, **kwargs):
         try:
-            return self.func(
-                *self.parse_args(*args), **self.parse_kwargs(**kwargs)
-            )
+            return self.func(*self.parse_args(*args), **self.parse_kwargs(**kwargs))
         except sh.DispatcherError as ex:
             if isinstance(ex.ex, NotImplementedError):
                 return Error.errors['#NAME?']
