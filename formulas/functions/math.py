@@ -454,14 +454,17 @@ def xsumifs(sum_range, *args):
     # Get all criteria ranges and their criteria
     criteria_ranges = []
     criteria_values = []
-    
     for i in range(0, len(args), 2):
         criteria_range = np.asarray(args[i], dtype=object)
         criteria = args[i+1]
 
         # if criteria is not a 1x1 array of arrays, then raise an error
-        if not isinstance(criteria, np.ndarray) or criteria.shape != (1, 1):
+        if isinstance(criteria, np.ndarray) and criteria.shape != (1, 1):
             raise Exception("FAILURE in SUMIFS")
+        
+        # if criteria is a literal, then convert it to a 1x1 array
+        if isinstance(criteria, str) or isinstance(criteria, float) or isinstance(criteria, int):
+            criteria = np.array([[criteria]])
         
         criteria = criteria[0][0]
         
@@ -471,14 +474,11 @@ def xsumifs(sum_range, *args):
         
         criteria_ranges.append(criteria_range)
         criteria_values.append(criteria)
-    
+
     # Create a mask where all criteria are met
     mask = np.ones(sum_range.shape, dtype=bool)
     
     for criteria_range, criteria in zip(criteria_ranges, criteria_values):
-
-        
-        
         # Apply xfilter logic for each criteria pair
         test_range = {'raw': replace_empty(criteria_range, '')}
         
@@ -564,7 +564,6 @@ def xsumifs(sum_range, *args):
         
         current_mask = np.vectorize(check, otypes=[bool])(values)
         mask = mask & current_mask
-    
     # Apply the mask to sum_range and calculate sum
     try:
         filtered_values = sum_range[mask]
